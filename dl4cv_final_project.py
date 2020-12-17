@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1Zl9gWfnmo50o4DltJ_qfZENJ-ndqsEpw
 """
 
+import wandb
+
 wandb.init(entity="jennyjli", project="aqi")
 
 def AirQualityCategory(aqi):
@@ -38,7 +40,6 @@ from skimage import transform
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import numpy as np
-import wandb
 
 class ToTensor(object):
     def __call__(self, sample):
