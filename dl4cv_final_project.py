@@ -7,6 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1Zl9gWfnmo50o4DltJ_qfZENJ-ndqsEpw
 """
 
+wandb.init(entity="jennyjli", project="aqi")
+
 def AirQualityCategory(aqi):
   if aqi <= 50:
     return 'Good'
@@ -42,22 +44,25 @@ class ToTensor(object):
         sat, cli, label = sample['sat'], sample['cli'], sample['label']
         sat = sat.transpose((2, 0, 1))
         cli = cli.transpose((2, 0, 1))
-        return {'sat': torch.from_numpy(sat).float(), 'cli': torch.from_numpy(cli).float(), 'label': float(label)}
+        return {'sat': torch.from_numpy(sat).float(), 'cli': torch.from_numpy(cli).float(), 'label': torch.tensor([label]).float()}
 
 class Normalize(object):
     def __call__(self, sample):
         normalize_in = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         sat, cli, label = sample['sat'], sample['cli'], sample['label']
-        sat = normalize_in(sat)
+        #sat = normalize_in(torch.from_numpy(sat).float())
         cli = normalize_in(cli)
         return {'sat': sat, 'cli': cli, 'label':label}
 
 class Rescale(object):
     def __call__(self, sample):
         sat, cli, label = sample['sat'], sample['cli'], sample['label']
+        #print("before sat shape",sat.shape)
+        #print("before cli shape",cli.shape)
         sat = transform.resize(sat, (224, 224))
         cli = transform.resize(cli, (224, 224))
-
+        #print("sat shape",sat.shape)
+        #print("cli shape",cli.shape)
         return {'sat': sat, 'cli': cli, 'label':label}
 
 class AQIDataset(Dataset):
@@ -123,15 +128,16 @@ from torchvision import datasets, models, transforms
 import matplotlib.pyplot as plt
 import os
 import copy
+import torch.nn.functional as F
 
 class AqiModel(nn.Module):
     def __init__(self):
         super(AqiModel, self).__init__()
         
-        sat_modules = list(models.resnet18().children())[:-1]
+        sat_modules = list(models.resnet18(pretrained=True).children())[:-1]
         self.modelA = nn.Sequential(nn.Conv2d(11, 3, 3, 1, 1), *sat_modules)
 
-        cli_modules = list(models.resnet18().children())[:-1]
+        cli_modules = list(models.resnet18(pretrained=True).children())[:-1]
         self.modelB = nn.Sequential(*cli_modules)
         
         self.fc = nn.Linear(1024, 1)
@@ -145,7 +151,7 @@ class AqiModel(nn.Module):
         return x
 
 # batch size
-batch_size = 16
+batch_size = 32
 
 # a method to train a model
 def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=5):
@@ -168,7 +174,6 @@ def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=5):
 
             # keep track of loss and corrects in the epoch
             running_loss = 0.0
-
             # Iterate over data.
             for sample in dataloaders[phase]:
                 # use torch with the device that does the computation
@@ -189,12 +194,14 @@ def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=5):
                         loss.backward()
                         optimizer.step()
                 # update loss and corrects
-                running_loss += loss.item() * inputs.size(0)
 
+                running_loss += loss.item() * sat.size(0)
             # compute loss and accuracy or the epoch
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             # print data
             print('{} Loss: {:.4f}'.format(phase, epoch_loss))
+            if phase == 'train':
+                wandb.log({phase+'/Epoch Loss': epoch_loss})
             # update the best model if we get a better accuracy
             if phase == 'val' and epoch_loss < best_loss:
                 best_loss = epoch_loss
@@ -205,9 +212,6 @@ def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=5):
     return model
 
 model = AqiModel()
-# freeze all layers
-for param in model.parameters():
-    param.requires_grad = False
 
 # Create training and validation datasets
 image_datasets = {'train':trainset, 'val':valset, 'test':testset}
@@ -226,5 +230,5 @@ criterion = nn.MSELoss()
 
 # Train and evaluate
 print("Training started...")
-model = train_model(model, dataloaders_dict, criterion, optimizer, device, num_epochs=50)
-torch.save(model.state_dict(), "api-model-50ep.pth")
+model = train_model(model, dataloaders_dict, criterion, optimizer, device, num_epochs=1000)
+torch.save(model.state_dict(), "aqi-model-1000ep.pth")
