@@ -109,7 +109,7 @@ for zip_name in glob.glob('./ee-data/'+'*-sat.zip'):
         aqi_data.append(pm25)
         sat_data.append(sat_img)
         cli_data.append(cli_img)
-dataset = AQIDataset(aqi_data, sat_data, cli_data, transforms=transforms.Compose([Rescale(), Normalize()]))
+dataset = AQIDataset(aqi_data, sat_data, cli_data, transforms=transforms.Compose([Rescale()]))
 print(len(dataset))
 
 import torch
